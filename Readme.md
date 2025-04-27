@@ -25,7 +25,7 @@ The Claims Document Extractor is a tool designed to process and extract relevant
 ## Usage
 Run the extractor script:
 ```bash
-python extractor.py
+python3 -m streamlit run app.py
 ```
 
 ## File Structure
