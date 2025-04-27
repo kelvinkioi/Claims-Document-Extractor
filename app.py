@@ -5,16 +5,45 @@ import re
 import pandas as pd
 from pdf2image import convert_from_bytes
 import numpy as np
-from io import BytesIO
+
+# Inject simple blue-themed CSS
+def local_css():
+    st.markdown(f"""
+        <style>
+            body {{
+                background-color: #ffffff;
+                color: #000000;
+                font-family: 'Arial', sans-serif;
+            }}
+            h1, h2, h3 {{
+                color: #1E90FF;
+                text-align: center;
+            }}
+            .stButton > button, .stDownloadButton > button {{
+                background-color: #1E90FF;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                font-size: 16px;
+                border-radius: 8px;
+                margin: 6px;
+            }}
+            .stButton > button:hover, .stDownloadButton > button:hover {{
+                background-color: #1C86EE;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
 
 # Streamlit UI Setup
-st.title("Claims Document Extractor (Batch Mode)")
-st.write("Upload scanned claims documents (PDF with multiple pages or multiple images) to extract details.")
+st.set_page_config(page_title="Claims Extractor", layout="wide")
+local_css()
+
+st.title("📄 Claims Document Extractor")
+st.markdown("Upload scanned claims documents (JPG, PNG, PDF) to extract details and download them easily.")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload file", type=["png", "jpg", "jpeg", "pdf"])
 
-# Helper Functions
 def preprocess_image(image):
     """Convert image to grayscale and apply thresholding"""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -42,37 +71,46 @@ def extract_claim_details(text):
     }
     return {key: (match.group(1) if match else "Not found") for key, match in fields.items()}
 
-# Main Processing
 if uploaded_file is not None:
-    all_claims = []  # List to hold details for each document
+    extracted_texts = []
+    claim_records = []
 
     if uploaded_file.type == "application/pdf":
         images = convert_from_bytes(uploaded_file.read())
-        st.write(f"Processing {len(images)} pages from uploaded PDF...")
+        progress = st.progress(0)
+        total_images = len(images)
+
         for idx, img in enumerate(images):
-            st.write(f"Processing page {idx + 1}...")
             img_array = np.array(img)
             text = extract_text_from_image(img_array)
+            extracted_texts.append(text)
             claim_details = extract_claim_details(text)
-            all_claims.append(claim_details)
+            claim_records.append(claim_details)
+            progress.progress((idx + 1) / total_images)
     else:
-        # For a single image file
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
         text = extract_text_from_image(image)
+        extracted_texts.append(text)
         claim_details = extract_claim_details(text)
-        all_claims.append(claim_details)
-    
-    # Combine all extracted claims into a DataFrame
-    df = pd.DataFrame(all_claims)
+        claim_records.append(claim_details)
 
-    # Display results
-    st.subheader("Extracted Claims Data")
-    st.dataframe(df)
+    st.success("✅ Extraction Completed!")
 
-    # Download options
+    st.subheader("📋 Extracted Claims Data")
+    df = pd.DataFrame(claim_records)
+    st.dataframe(df, use_container_width=True)
+
+    # Download buttons
     json_data = df.to_json(orient="records", indent=2)
     csv_data = df.to_csv(index=False)
-
     st.download_button("Download JSON", json_data, "claims_data.json", "application/json")
     st.download_button("Download CSV", csv_data, "claims_data.csv", "text/csv")
+
+# Footer
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center;'>Developed with ❤️ by "
+    "<a href='https://github.com/kelvinkioi/' target='_blank'>Kelvin Kioi</a></div>",
+    unsafe_allow_html=True
+)
