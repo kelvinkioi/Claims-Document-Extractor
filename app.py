@@ -8,12 +8,13 @@ import numpy as np
 from io import BytesIO
 
 # Streamlit UI Setup
-st.title("Claims Document Extractor")
-st.write("Upload a scanned claims document (JPG, PNG, PDF) to extract details.")
+st.title("Claims Document Extractor (Batch Mode)")
+st.write("Upload scanned claims documents (PDF with multiple pages or multiple images) to extract details.")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload file", type=["png", "jpg", "jpeg", "pdf"])
 
+# Helper Functions
 def preprocess_image(image):
     """Convert image to grayscale and apply thresholding"""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -41,26 +42,37 @@ def extract_claim_details(text):
     }
     return {key: (match.group(1) if match else "Not found") for key, match in fields.items()}
 
+# Main Processing
 if uploaded_file is not None:
-    extracted_text = ""
+    all_claims = []  # List to hold details for each document
+
     if uploaded_file.type == "application/pdf":
         images = convert_from_bytes(uploaded_file.read())
-        for img in images:
+        st.write(f"Processing {len(images)} pages from uploaded PDF...")
+        for idx, img in enumerate(images):
+            st.write(f"Processing page {idx + 1}...")
             img_array = np.array(img)
-            extracted_text += extract_text_from_image(img_array) + "\n"
+            text = extract_text_from_image(img_array)
+            claim_details = extract_claim_details(text)
+            all_claims.append(claim_details)
     else:
+        # For a single image file
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        extracted_text = extract_text_from_image(image)
+        text = extract_text_from_image(image)
+        claim_details = extract_claim_details(text)
+        all_claims.append(claim_details)
     
-    claim_details = extract_claim_details(extracted_text)
-    
+    # Combine all extracted claims into a DataFrame
+    df = pd.DataFrame(all_claims)
+
+    # Display results
     st.subheader("Extracted Claims Data")
-    df = pd.DataFrame([claim_details])
     st.dataframe(df)
-    
-    # Download JSON or CSV
+
+    # Download options
     json_data = df.to_json(orient="records", indent=2)
     csv_data = df.to_csv(index=False)
+
     st.download_button("Download JSON", json_data, "claims_data.json", "application/json")
     st.download_button("Download CSV", csv_data, "claims_data.csv", "text/csv")
